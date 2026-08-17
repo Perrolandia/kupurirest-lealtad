@@ -125,16 +125,7 @@
   Falta conectar la base de datos (Firebase). Revisa el archivo LEEME.md para completar la configuración.
 </p>
 
-<div class="pin-pantalla" id="pin-pantalla">
-  <div class="field">
-    <label>PIN del staff</label>
-    <input type="password" inputmode="numeric" maxlength="4" id="pin-input" placeholder="••••">
-  </div>
-  <button class="btn" id="pin-entrar">Entrar</button>
-  <p class="pin-error" id="pin-error">PIN incorrecto, intenta de nuevo.</p>
-</div>
-
-<div id="app-staff">
+<div id="app-staff" style="display:block;">
 <main>
 
   <div class="sub-nav">
@@ -202,30 +193,6 @@ const META_3 = 10;
 
 function limpiarTel(v){ return v.replace(/\D/g,''); }
 
-// ============================================================
-// PIN del staff — cámbialo aquí por el que quieras usar en el restaurante
-// ============================================================
-const PIN_STAFF = "2026";
-// ============================================================
-
-if(sessionStorage.getItem('kupuri_staff_ok') === 'si'){
-  document.getElementById('pin-pantalla').style.display = 'none';
-  document.getElementById('app-staff').style.display = 'block';
-}
-document.getElementById('pin-entrar').onclick = () => {
-  const valor = document.getElementById('pin-input').value.trim();
-  if(valor === PIN_STAFF){
-    sessionStorage.setItem('kupuri_staff_ok', 'si');
-    document.getElementById('pin-pantalla').style.display = 'none';
-    document.getElementById('app-staff').style.display = 'block';
-  }else{
-    document.getElementById('pin-error').style.display = 'block';
-  }
-};
-document.getElementById('pin-input').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter'){ document.getElementById('pin-entrar').click(); }
-});
-
 let clientesCache = null;
 
 function subNav(){
@@ -288,8 +255,11 @@ function renderListaClientes(lista){
   document.querySelectorAll('.fila-cliente').forEach(fila => {
     fila.onclick = () => {
       document.getElementById('staff-phone').value = fila.dataset.tel;
-      document.getElementById('sub-tab-buscar').click();
-      document.getElementById('staff-buscar').click();
+      document.getElementById('sub-tab-buscar').classList.add('active');
+      document.getElementById('sub-tab-dashboard').classList.remove('active');
+      document.getElementById('view-staff').classList.add('active');
+      document.getElementById('view-dashboard').classList.remove('active');
+      buscarClienteEnStaff(fila.dataset.tel);
     };
   });
 }
@@ -388,7 +358,6 @@ function renderDatosExtra(cliente){
   resumen += '</div>';
   const editar = `
     <div class="mas-datos" id="editar-datos">
-      <div class="field"><label>Teléfono</label><input type="tel" id="editar-telefono" value="${cliente.phone||''}"></div>
       <div class="field"><label>Apellido</label><input type="text" id="editar-apellido" value="${cliente.apellido||''}"></div>
       <div class="field"><label>Correo electrónico</label><input type="email" id="editar-email" value="${cliente.email||''}"></div>
       <div class="field"><label>Instagram</label><input type="text" id="editar-instagram" value="${cliente.instagram||''}"></div>
@@ -419,8 +388,8 @@ async function getCliente(tel){
   return { ref, snap };
 }
 
-document.getElementById('staff-buscar').onclick = async () => {
-  const tel = limpiarTel(document.getElementById('staff-phone').value);
+async function buscarClienteEnStaff(telRaw){
+  const tel = limpiarTel(telRaw);
   const cont = document.getElementById('staff-resultado');
   if(!tel){ cont.innerHTML = '<p class="msg error">Ingresa un número válido.</p>'; return; }
   cont.innerHTML = '<p class="msg">Buscando…</p>';
@@ -432,7 +401,7 @@ document.getElementById('staff-buscar').onclick = async () => {
       cont.innerHTML = `
         <div class="card">
           <p class="card-name">Cliente nuevo</p>
-          <p class="card-phone">${tel}</p>
+          <div class="field"><label>Teléfono</label><input type="tel" id="nuevo-telefono" value="${tel}"></div>
           <div class="field"><label>Nombre</label><input type="text" id="nuevo-nombre" placeholder="Nombre"></div>
           <div class="field"><label>Apellido</label><input type="text" id="nuevo-apellido" placeholder="Opcional"></div>
           <button type="button" class="btn-link" id="toggle-mas-datos">+ Agregar más datos (opcional)</button>
@@ -459,6 +428,7 @@ document.getElementById('staff-buscar').onclick = async () => {
         document.getElementById('mas-datos').classList.toggle('abierto');
       };
       document.getElementById('crear-cliente').onclick = async () => {
+        const telFinal = limpiarTel(document.getElementById('nuevo-telefono').value) || tel;
         const nombre = document.getElementById('nuevo-nombre').value.trim() || 'Cliente';
         const apellido = document.getElementById('nuevo-apellido').value.trim();
         const email = document.getElementById('nuevo-email').value.trim();
@@ -467,12 +437,20 @@ document.getElementById('staff-buscar').onclick = async () => {
         const nacimiento = document.getElementById('nuevo-nacimiento').value;
         const conocio = document.getElementById('nuevo-conocio').value;
         const ocupacion = document.getElementById('nuevo-ocupacion').value.trim();
-        await ref.set({
-          name: nombre, apellido, phone: tel, email, instagram, colonia,
+        if(telFinal !== tel){
+          const yaExiste = await db.collection('clientes').doc(telFinal).get();
+          if(yaExiste.exists){
+            alert('Ya existe un cliente registrado con ese número.');
+            return;
+          }
+        }
+        await db.collection('clientes').doc(telFinal).set({
+          name: nombre, apellido, phone: telFinal, email, instagram, colonia,
           nacimiento, conocio, ocupacion,
           stamps: 0, reward1Used: false, reward2Used: false, createdAt: Date.now()
         });
-        cargarTarjetaStaff(tel);
+        document.getElementById('staff-phone').value = telFinal;
+        cargarTarjetaStaff(telFinal);
       };
       return;
     }
@@ -480,7 +458,26 @@ document.getElementById('staff-buscar').onclick = async () => {
   }catch(e){
     cont.innerHTML = '<p class="msg error">No se pudo conectar. Revisa la configuración de Firebase en LEEME.md.</p>';
   }
-};
+}
+document.getElementById('staff-buscar').onclick = () => buscarClienteEnStaff(document.getElementById('staff-phone').value);
+
+async function cambiarTelefonoSiHaceFalta(refActual, cliente, telActual, nuevoTelRaw, extra){
+  const nuevoTel = limpiarTel(nuevoTelRaw);
+  if(nuevoTel && nuevoTel !== telActual){
+    const nuevoRef = db.collection('clientes').doc(nuevoTel);
+    const yaExiste = await nuevoRef.get();
+    if(yaExiste.exists){
+      alert('Ya existe un cliente registrado con ese número.');
+      return telActual;
+    }
+    await nuevoRef.set({ ...cliente, ...extra, phone: nuevoTel });
+    await refActual.delete();
+    return nuevoTel;
+  }else{
+    await refActual.update(extra);
+    return telActual;
+  }
+}
 
 async function cargarTarjetaStaff(tel){
   const cont = document.getElementById('staff-resultado');
@@ -490,7 +487,11 @@ async function cargarTarjetaStaff(tel){
   cont.innerHTML = `
     <div class="card">
       <p class="card-name">${cliente.name}${cliente.apellido ? ' ' + cliente.apellido : ''}</p>
-      <p class="card-phone">${cliente.phone}</p>
+      <p class="card-phone">${cliente.phone} <button type="button" class="btn-link" id="toggle-editar-tel-rapido" style="width:auto;display:inline;padding:0;margin:0;font-size:0.75rem;">(editar)</button></p>
+      <div class="mas-datos" id="editar-tel-rapido">
+        <div class="field"><input type="tel" id="editar-tel-rapido-input" value="${cliente.phone}"></div>
+        <button class="btn" id="guardar-tel-rapido">Guardar teléfono</button>
+      </div>
       ${renderStamps(cliente.stamps)}
       <button class="btn" id="btn-sellar" ${cliente.stamps >= TOTAL_SELLOS ? 'disabled' : ''}>+ 1 sello</button>
       <a class="btn-whatsapp" target="_blank" rel="noopener" href="${linkWhatsApp(cliente.phone, mensajeWhatsApp(cliente.name, cliente.stamps))}">Enviar WhatsApp al cliente</a>
@@ -513,11 +514,18 @@ async function cargarTarjetaStaff(tel){
   const btn3 = document.getElementById('btn-usar-3');
   if(btn3){ btn3.onclick = async () => { await ref.update({ stamps: 0, reward1Used: false, reward2Used: false }); cargarTarjetaStaff(tel); }; }
 
+  document.getElementById('toggle-editar-tel-rapido').onclick = () => {
+    document.getElementById('editar-tel-rapido').classList.toggle('abierto');
+  };
+  document.getElementById('guardar-tel-rapido').onclick = async () => {
+    const nuevo = await cambiarTelefonoSiHaceFalta(ref, cliente, tel, document.getElementById('editar-tel-rapido-input').value, {});
+    document.getElementById('staff-phone').value = nuevo;
+    cargarTarjetaStaff(nuevo);
+  };
   document.getElementById('toggle-editar-datos').onclick = () => {
     document.getElementById('editar-datos').classList.toggle('abierto');
   };
   document.getElementById('guardar-datos').onclick = async () => {
-    const nuevoTel = limpiarTel(document.getElementById('editar-telefono').value);
     const camposExtra = {
       apellido: document.getElementById('editar-apellido').value.trim(),
       email: document.getElementById('editar-email').value.trim(),
@@ -527,21 +535,8 @@ async function cargarTarjetaStaff(tel){
       conocio: document.getElementById('editar-conocio').value,
       ocupacion: document.getElementById('editar-ocupacion').value.trim()
     };
-    if(nuevoTel && nuevoTel !== tel){
-      const nuevoRef = db.collection('clientes').doc(nuevoTel);
-      const yaExiste = await nuevoRef.get();
-      if(yaExiste.exists){
-        alert('Ya existe un cliente registrado con ese número.');
-        return;
-      }
-      await nuevoRef.set({ ...cliente, ...camposExtra, phone: nuevoTel });
-      await ref.delete();
-      document.getElementById('staff-phone').value = nuevoTel;
-      cargarTarjetaStaff(nuevoTel);
-    }else{
-      await ref.update(camposExtra);
-      cargarTarjetaStaff(tel);
-    }
+    await ref.update(camposExtra);
+    cargarTarjetaStaff(tel);
   };
   document.getElementById('btn-eliminar').onclick = async () => {
     if(confirm(`¿Seguro que quieres eliminar a ${cliente.name}${cliente.apellido ? ' ' + cliente.apellido : ''}? Esta acción no se puede deshacer.`)){
