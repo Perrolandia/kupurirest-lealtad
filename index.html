@@ -276,6 +276,7 @@ function renderTarjetaCliente(cliente){
     <div class="card">
       <p class="card-name">${cliente.name}${cliente.apellido ? ' ' + cliente.apellido : ''}</p>
       <p class="card-phone">${cliente.phone}</p>
+      ${cliente.tarjetasCompletadas > 0 ? `<p class="card-phone" style="margin-top:-1rem;">Tarjetas completadas: <strong>${cliente.tarjetasCompletadas}</strong></p>` : ''}
       ${renderStamps(cliente.stamps)}
       ${renderRewards(cliente)}
     </div>`;
@@ -320,7 +321,7 @@ document.getElementById('cliente-buscar').onclick = async () => {
           nacimiento: '',
           conocio: document.getElementById('registro-conocio').value,
           ocupacion: '',
-          stamps: 0, reward1Used: false, reward2Used: false, createdAt: Date.now()
+          stamps: 0, reward1Used: false, reward2Used: false, tarjetasCompletadas: 0, createdAt: Date.now()
         };
         await db.collection('clientes').doc(tel).set(nuevoCliente);
         notificarStaffNuevoCliente(nombre, tel);
