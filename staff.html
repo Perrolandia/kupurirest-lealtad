@@ -403,10 +403,16 @@ function renderDatosExtra(cliente){
       <div class="field"><label>Instagram o Facebook</label><input type="text" id="editar-instagram" value="${cliente.instagram||''}"></div>
       <button class="btn" id="guardar-datos">Guardar datos</button>
     </div>`;
+  const historial = (cliente.historial || []).slice().sort((a,b) => b - a);
+  const historialHtml = historial.length
+    ? `<div class="mas-datos" id="ver-historial"><div class="datos-extra">${historial.map(ts => `<p>🎉 Tarjeta completada el ${new Date(ts).toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' })}</p>`).join('')}</div></div>`
+    : `<div class="mas-datos" id="ver-historial"><div class="datos-extra"><p>Aún no ha completado ninguna tarjeta.</p></div></div>`;
   return `
     <button type="button" class="btn-link" id="toggle-editar-datos">Ver / editar más datos</button>
     ${resumen}
-    ${editar}`;
+    ${editar}
+    <button type="button" class="btn-link" id="toggle-historial">Ver tarjetas anteriores (${cliente.tarjetasCompletadas||0})</button>
+    ${historialHtml}`;
 }
 
 async function getCliente(tel){
@@ -460,7 +466,7 @@ async function buscarClienteEnStaff(telRaw){
         await db.collection('clientes').doc(telFinal).set({
           name: nombre, apellido, phone: telFinal, email: '', instagram, colonia: '',
           nacimiento: '', conocio, ocupacion: '',
-          stamps: 0, reward1Used: false, reward2Used: false, tarjetasCompletadas: 0, createdAt: Date.now()
+          stamps: 0, reward1Used: false, reward2Used: false, tarjetasCompletadas: 0, historial: [], createdAt: Date.now()
         });
         document.getElementById('staff-phone').value = telFinal;
         cargarTarjetaStaff(telFinal);
@@ -490,6 +496,20 @@ async function cambiarTelefonoSiHaceFalta(refActual, cliente, telActual, nuevoTe
     await refActual.update(extra);
     return telActual;
   }
+}
+
+function renderTarjetaCompletada(cliente, tel){
+  const cont = document.getElementById('staff-resultado');
+  const mensaje = mensajeWhatsApp(cliente.name, TOTAL_SELLOS);
+  cont.innerHTML = `
+    <div class="card">
+      <p class="card-name">¡Tarjeta completa! 🎉</p>
+      <p class="card-phone">${cliente.name}${cliente.apellido ? ' ' + cliente.apellido : ''} — ${cliente.phone}</p>
+      <p class="card-phone">Entrega el aguachile grande de la 10ma visita. Lleva <strong>${cliente.tarjetasCompletadas}</strong> tarjeta(s) completada(s) en total.</p>
+      <a class="btn-whatsapp" target="_blank" rel="noopener" href="${linkWhatsApp(cliente.phone, mensaje)}">Enviar WhatsApp de tarjeta completa</a>
+      <button class="btn" id="btn-continuar-nueva" style="margin-top:10px;">Continuar con nueva tarjeta</button>
+    </div>`;
+  document.getElementById('btn-continuar-nueva').onclick = () => cargarTarjetaStaff(tel);
 }
 
 async function cargarTarjetaStaff(tel){
@@ -522,17 +542,19 @@ async function cargarTarjetaStaff(tel){
     btnSellar.onclick = async () => {
       const nuevoConteo = (cliente.stamps || 0) + 1;
       if(nuevoConteo >= TOTAL_SELLOS){
+        const clienteCompletado = { ...cliente, stamps: TOTAL_SELLOS, tarjetasCompletadas: (cliente.tarjetasCompletadas||0)+1 };
         await ref.update({
           stamps: 0,
           reward1Used: false,
           reward2Used: false,
-          tarjetasCompletadas: firebase.firestore.FieldValue.increment(1)
+          tarjetasCompletadas: firebase.firestore.FieldValue.increment(1),
+          historial: firebase.firestore.FieldValue.arrayUnion(Date.now())
         });
-        alert(`¡Tarjeta completa! Entrega el aguachile grande de la 10ma visita.\n${cliente.name} lleva ${(cliente.tarjetasCompletadas||0)+1} tarjeta(s) completada(s) en total.`);
+        renderTarjetaCompletada(clienteCompletado, tel);
       }else{
         await ref.update({ stamps: firebase.firestore.FieldValue.increment(1) });
+        cargarTarjetaStaff(tel);
       }
-      cargarTarjetaStaff(tel);
     };
   }
   const btnQuitarSello = document.getElementById('btn-quitar-sello');
@@ -561,6 +583,9 @@ async function cargarTarjetaStaff(tel){
   };
   document.getElementById('toggle-editar-datos').onclick = () => {
     document.getElementById('editar-datos').classList.toggle('abierto');
+  };
+  document.getElementById('toggle-historial').onclick = () => {
+    document.getElementById('ver-historial').classList.toggle('abierto');
   };
   document.getElementById('guardar-datos').onclick = async () => {
     const camposExtra = {

@@ -321,7 +321,7 @@ document.getElementById('cliente-buscar').onclick = async () => {
           nacimiento: '',
           conocio: document.getElementById('registro-conocio').value,
           ocupacion: '',
-          stamps: 0, reward1Used: false, reward2Used: false, tarjetasCompletadas: 0, createdAt: Date.now()
+          stamps: 0, reward1Used: false, reward2Used: false, tarjetasCompletadas: 0, historial: [], createdAt: Date.now()
         };
         await db.collection('clientes').doc(tel).set(nuevoCliente);
         notificarStaffNuevoCliente(nombre, tel);
